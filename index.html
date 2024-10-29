@@ -1,0 +1,78 @@
+<h1>Google Gemini API Flea Market Value Appraisal</h1>
+<video id="player" autoplay></video>
+<br />
+<button id="start">Start</button>
+<button id="stop">Stop</button>
+<br />
+<pre id="output"></pre>
+
+<script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+<script>
+  const SUPABASE_URL = 'http://127.0.0.1:54321';
+  const SUPABASE_ANON_KEY =
+    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0';
+
+  // Create a single supabase client for interacting with your database
+  const supa = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  var player = document.getElementById('player');
+
+  let shouldStop = false;
+  let stopped = false;
+  const outputPre = document.getElementById('output');
+  const stopButton = document.getElementById('stop');
+  const startButton = document.getElementById('start');
+
+  startButton.addEventListener('click', function () {
+    console.log('start button clicked');
+    navigator.mediaDevices
+      .getUserMedia({ audio: true, video: true })
+      .then(handleSuccess);
+  });
+
+  stopButton.addEventListener('click', function () {
+    console.log('stop button clicked');
+    shouldStop = true;
+    player.srcObject = null;
+  });
+
+  var handleSuccess = function (stream) {
+    player.srcObject = stream;
+
+    const options = { mimeType: 'video/webm' };
+    const recordedChunks = [];
+    const mediaRecorder = new MediaRecorder(stream, options);
+
+    mediaRecorder.addEventListener('dataavailable', function (e) {
+      console.log('dataavailable');
+      if (e.data.size > 0) {
+        recordedChunks.push(e.data);
+      }
+
+      if (shouldStop === true && stopped === false) {
+        mediaRecorder.stop();
+        console.log('recording stopped');
+        stopped = true;
+      }
+    });
+
+    mediaRecorder.addEventListener('stop', function () {
+      //downloadLink.href = URL.createObjectURL(new Blob(recordedChunks));
+      //downloadLink.download = 'acetest.webm';
+      const blob = new Blob(recordedChunks);
+      const formData = new FormData();
+      formData.append('file', blob, `webcam-recording_${Date.now()}.webm`);
+
+      // Send to Edge Functions
+      supa.functions
+        .invoke('appraise', {
+          body: formData,
+        })
+        .then((res) => {
+          outputPre.innerHTML = JSON.stringify(res, null, 2);
+        });
+    });
+
+    mediaRecorder.start(1000);
+  };
+</script>
